@@ -10,10 +10,16 @@ import { Auth } from "./entities/auth.entity";
 import { CreateAuthDto } from "./dto/create-auth.dto";
 import * as bcrypt from "bcrypt";
 import * as nodemailer from "nodemailer";
+import { LoginAuthDto } from "./dto/login-auth.dto";
+import { JwtService } from "@nestjs/jwt";
 
 @Injectable()
 export class AuthService {
-  constructor(@InjectModel(Auth) private authModel: typeof Auth) {}
+  constructor(
+    @InjectModel(Auth) private authModel: typeof Auth,
+
+    private jwtService: JwtService,
+  ) {}
 
   private transporter = nodemailer.createTransport({
     service: "gmail",
@@ -53,34 +59,29 @@ export class AuthService {
     });
   }
 
-    async login(createAuthDto: CreateAuthDto): Promise<Auth> {
-    const { username, email, password } = createAuthDto;
+  async login(
+    loginAuthDto: LoginAuthDto,
+  ): Promise<{ token: string } | { message: string }> {
+    const { email, password } = loginAuthDto;
 
     const foundedUser = await this.authModel.findOne({
       where: { email },
     });
 
-    if (foundedUser) throw new BadRequestException("user already exists");
+    if (!foundedUser) throw new UnauthorizedException("user not found");
 
-    const hashPassword = await bcrypt.hash(password, 16);
+    const comp = await bcrypt.compare(
+      password,
+      foundedUser.dataValues.password,
+    );
 
-    const code = Array.from({ length: 7 }, () =>
-      Math.floor(Math.random() * 10),
-    ).join("");
+    if (comp) {
+      return {
+        token: await this.jwtService.signAsync({ email: foundedUser.email }),
+      };
+    }
 
-    await this.transporter.sendMail({
-      from: "aziazi22t@gmail.com",
-      to: email,
-      subject: "Otp",
-      text: "simple",
-      html: `<b>Hello World ${code}<b>`,
-    });
-
-    return await this.authModel.create({
-      username,
-      email,
-      password: hashPassword,
-    });
+    return { message: "invalid password" };
   }
 
   async findAll(): Promise<Auth[]> {

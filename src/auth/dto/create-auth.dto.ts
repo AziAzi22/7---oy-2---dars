@@ -19,3 +19,5 @@ export class CreateAuthDto {
   @Transform(({ value }) => value.trim())
   password: string;
 }
+
+
